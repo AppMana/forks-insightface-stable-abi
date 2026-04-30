@@ -37,10 +37,11 @@ jobs:
             archs: x86_64
           - os: ubuntu-24.04-arm
             archs: aarch64
-          - os: macos-13
-            archs: x86_64
+          # Single macOS job builds both archs via cibuildwheel cross-compile;
+          # GitHub's macOS x86_64 (macos-13) runner pool is heavily contended
+          # and routinely sits queued 10+ minutes.
           - os: macos-14
-            archs: arm64
+            archs: x86_64 arm64
           - os: windows-2022
             archs: AMD64
     steps:
