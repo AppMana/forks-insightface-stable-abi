@@ -1,0 +1,220 @@
+name: Stable ABI Wheel Build
+
+on:
+  push:
+    branches:
+      - abi3_stable
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-meta:
+    name: Compute release metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+    steps:
+      - id: meta
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          timestamp="$(date -u +%Y%m%d-%H%M%S)"
+          echo "tag_name=nightly-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "release_name=Nightly ${timestamp} (${short_sha})" >> "$GITHUB_OUTPUT"
+
+  build-wheels:
+    name: Build ${{ matrix.os }} ${{ matrix.archs }}
+    runs-on: ${{ matrix.os }}
+    needs: release-meta
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            archs: x86_64
+          - os: ubuntu-24.04-arm
+            archs: aarch64
+          - os: macos-13
+            archs: x86_64
+          - os: macos-14
+            archs: arm64
+          - os: windows-2022
+            archs: AMD64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.21
+        with:
+          package-dir: python-package
+        env:
+          CIBW_ARCHS: ${{ matrix.archs }}
+
+      - name: Audit ABI3
+        shell: bash
+        run: |
+          python -m pip install abi3audit
+          for whl in wheelhouse/*.whl; do
+            python -m abi3audit -v "$whl"
+          done
+
+      - name: Verify wheel tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          for whl in wheelhouse/*.whl; do
+            case "$whl" in
+              *cp311-abi3*) ;;
+              *) echo "Unexpected wheel tag: $whl"; exit 1 ;;
+            esac
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: insightface-${{ matrix.os }}-${{ matrix.archs }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  build-sdist:
+    name: Build sdist
+    runs-on: ubuntu-24.04
+    needs: release-meta
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build --sdist python-package --outdir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: insightface-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish prerelease
+    runs-on: ubuntu-24.04
+    needs: [release-meta, build-wheels, build-sdist]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Show artifacts
+        run: ls -la release-artifacts/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-meta.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.release-meta.outputs.release_name }}
+          prerelease: true
+          files: |
+            release-artifacts/*.whl
+            release-artifacts/*.tar.gz
+          fail_on_unmatched_files: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-simple-index:
+    name: Publish gh-pages simple index
+    runs-on: ubuntu-24.04
+    needs: [release-meta, build-wheels, publish-release]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Build gh-pages /cu128/ and /cu130/ indexes
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-meta.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REPO_URL" gh-pages >/dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "$REPO_URL" gh-pages
+          else
+            mkdir -p gh-pages
+            ( cd gh-pages && git init && git checkout -b gh-pages && git remote add origin "$REPO_URL" )
+          fi
+
+          release_base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}"
+          urlquote () { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"; }
+
+          mkdir -p gh-pages/cu128/insightface gh-pages/cu130/insightface
+          touch gh-pages/cu128/insightface/links.tsv gh-pages/cu130/insightface/links.tsv
+
+          upsert_manifest_line () {
+            local manifest="$1" name="$2" hash="$3" url="$4" tmp
+            tmp="$(mktemp)"
+            awk -F '\t' -v name="$name" '$1 != name' "$manifest" > "$tmp"
+            printf '%s\t%s\t%s\n' "$name" "$hash" "$url" >> "$tmp"
+            mv "$tmp" "$manifest"
+          }
+
+          shopt -s nullglob
+          # insightface wheels are CUDA-agnostic (ONNX runtime backend), so the
+          # same wheel set is published under both /cu128/ and /cu130/ to mirror
+          # the layout the appmana pip facade expects.
+          for whl in release-artifacts/*.whl release-artifacts/*.tar.gz; do
+            base="$(basename "$whl")"
+            hash="$(sha256sum "$whl" | awk '{print $1}')"
+            url="${release_base_url}/$(urlquote "$base")"
+            for cu in cu128 cu130; do
+              upsert_manifest_line "gh-pages/${cu}/insightface/links.tsv" "$base" "$hash" "$url"
+            done
+          done
+
+          write_pkg_index () {
+            local cu="$1" pkg_dir="gh-pages/${1}/insightface" manifest
+            manifest="${pkg_dir}/links.tsv"
+            {
+              echo '<!doctype html><html><body>'
+              sort "$manifest" | while IFS=$'\t' read -r name hash url; do
+                [[ -n "$name" ]] || continue
+                printf '<a href="%s#sha256=%s">%s</a><br/>\n' "$url" "$hash" "$name"
+              done
+              echo '</body></html>'
+            } > "${pkg_dir}/index.html"
+
+            {
+              echo '<!doctype html><html><body>'
+              echo '<a href="insightface/">insightface</a>'
+              echo '</body></html>'
+            } > "gh-pages/${cu}/index.html"
+          }
+          write_pkg_index cu128
+          write_pkg_index cu130
+
+          {
+            echo '<!doctype html><html><body>'
+            echo '<a href="cu128/">cu128</a><br/>'
+            echo '<a href="cu130/">cu130</a>'
+            echo '</body></html>'
+          } > gh-pages/index.html
+          touch gh-pages/.nojekyll
+
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No gh-pages changes."
+            exit 0
+          fi
+          git commit -m "Update simple index for ${GITHUB_SHA}"
+          git push origin gh-pages

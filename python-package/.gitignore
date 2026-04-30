@@ -1,0 +1,7 @@
+build/
+dist/
+*.egg-info/
+*.so
+*.pyd
+insightface/thirdparty/face3d/mesh/cython/mesh_core_cython.c
+insightface/thirdparty/face3d/mesh/cython/mesh_core_cython.cpp

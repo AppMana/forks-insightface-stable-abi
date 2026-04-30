@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools>=80", "numpy>=2.3", "cython>=3.2", "setuptools_scm>=9"]
+requires = ["setuptools>=80", "numpy>=2.0", "cython>=3.1", "wheel>=0.45"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "insightface"
-dynamic = ["version"]
+version = "0.7.3"
 dependencies = [
-    "numpy",
+    "numpy>=1.23",
     "onnx",
     "tqdm",
     "requests",
@@ -16,26 +16,60 @@ dependencies = [
     "scikit-learn",
     "scikit-image",
     "easydict",
-    "cython",
     "albumentations",
     "prettytable",
 ]
 authors = [
-  {name = "InsightFace Contributors", email = "contact@insightface.ai"},
-  {name = "Hameer Abbasi", email = "hameerabbasi@yahoo.com"},
+    { name = "InsightFace Contributors", email = "contact@insightface.ai" },
+    { name = "AppMana", email = "accounts@appmana.com" },
 ]
-description = "InsightFace Python Library"
+description = "InsightFace Python Library (stable-ABI fork)"
 readme = "README.md"
 license = "MIT"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
 
-[tool.setuptools.packages.find]
-where = ["."]
-exclude = ["*.docs.*", "*.tests.*", "*.scripts.*"]
+[project.optional-dependencies]
+test = ["pytest", "onnxruntime"]
+
+[project.urls]
+Homepage = "https://github.com/AppMana/forks-insightface-stable-abi"
+Upstream = "https://github.com/deepinsight/insightface"
+Issues = "https://github.com/AppMana/forks-insightface-stable-abi/issues"
 
 [project.entry-points."console_scripts"]
 insightface-cli = "insightface.commands.insightface_cli:main"
 
-[project.urls]
-Homepage = "https://github.com/deepinsight/insightface"
-Repository = "https://github.com/deepinsight/insightface.git"
-Issues = "https://github.com/deepinsight/insightface/issues"
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["docs*", "tests*", "scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+pythonpath = []
+
+[tool.cibuildwheel]
+build = "cp311-*"
+build-frontend = "build"
+test-extras = ["test"]
+test-command = "pytest {package}/tests"
+skip = ["*-win32", "*-manylinux_i686", "pp*", "*-musllinux_*"]
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
