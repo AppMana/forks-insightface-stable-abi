@@ -52,7 +52,7 @@ jobs:
           python-version: "3.12"
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.21
+        uses: pypa/cibuildwheel@v3.2
         with:
           package-dir: python-package
         env:
