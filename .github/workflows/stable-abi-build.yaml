@@ -138,7 +138,7 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
-      - name: Build gh-pages /cu128/ and /cu130/ indexes
+      - name: Build gh-pages /insightface/ index
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -153,11 +153,16 @@ jobs:
             ( cd gh-pages && git init && git checkout -b gh-pages && git remote add origin "$REPO_URL" )
           fi
 
+          # Wipe any previous /cu128/ /cu130/ layout — insightface is not a
+          # CUDA project, the wheels are onnxruntime-only, so the index lives
+          # at a single flat path.
+          rm -rf gh-pages/cu128 gh-pages/cu130
+
           release_base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}"
           urlquote () { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"; }
 
-          mkdir -p gh-pages/cu128/insightface gh-pages/cu130/insightface
-          touch gh-pages/cu128/insightface/links.tsv gh-pages/cu130/insightface/links.tsv
+          mkdir -p gh-pages/insightface
+          touch gh-pages/insightface/links.tsv
 
           upsert_manifest_line () {
             local manifest="$1" name="$2" hash="$3" url="$4" tmp
@@ -168,43 +173,25 @@ jobs:
           }
 
           shopt -s nullglob
-          # insightface wheels are CUDA-agnostic (ONNX runtime backend), so the
-          # same wheel set is published under both /cu128/ and /cu130/ to mirror
-          # the layout the appmana pip facade expects.
           for whl in release-artifacts/*.whl release-artifacts/*.tar.gz; do
             base="$(basename "$whl")"
             hash="$(sha256sum "$whl" | awk '{print $1}')"
             url="${release_base_url}/$(urlquote "$base")"
-            for cu in cu128 cu130; do
-              upsert_manifest_line "gh-pages/${cu}/insightface/links.tsv" "$base" "$hash" "$url"
-            done
+            upsert_manifest_line "gh-pages/insightface/links.tsv" "$base" "$hash" "$url"
           done
-
-          write_pkg_index () {
-            local cu="$1" pkg_dir="gh-pages/${1}/insightface" manifest
-            manifest="${pkg_dir}/links.tsv"
-            {
-              echo '<!doctype html><html><body>'
-              sort "$manifest" | while IFS=$'\t' read -r name hash url; do
-                [[ -n "$name" ]] || continue
-                printf '<a href="%s#sha256=%s">%s</a><br/>\n' "$url" "$hash" "$name"
-              done
-              echo '</body></html>'
-            } > "${pkg_dir}/index.html"
-
-            {
-              echo '<!doctype html><html><body>'
-              echo '<a href="insightface/">insightface</a>'
-              echo '</body></html>'
-            } > "gh-pages/${cu}/index.html"
-          }
-          write_pkg_index cu128
-          write_pkg_index cu130
 
           {
             echo '<!doctype html><html><body>'
-            echo '<a href="cu128/">cu128</a><br/>'
-            echo '<a href="cu130/">cu130</a>'
+            sort gh-pages/insightface/links.tsv | while IFS=$'\t' read -r name hash url; do
+              [[ -n "$name" ]] || continue
+              printf '<a href="%s#sha256=%s">%s</a><br/>\n' "$url" "$hash" "$name"
+            done
+            echo '</body></html>'
+          } > gh-pages/insightface/index.html
+
+          {
+            echo '<!doctype html><html><body>'
+            echo '<a href="insightface/">insightface</a>'
             echo '</body></html>'
           } > gh-pages/index.html
           touch gh-pages/.nojekyll
@@ -212,7 +199,7 @@ jobs:
           cd gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add -A
           if git diff --cached --quiet; then
             echo "No gh-pages changes."
             exit 0

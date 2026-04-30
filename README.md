@@ -8,23 +8,22 @@ Fork of [`deepinsight/insightface`](https://github.com/deepinsight/insightface) 
 
 The default branch for this fork is `abi3_stable`.
 
-## Indexes
+## Index
 
-* `https://appmana.github.io/forks-insightface-stable-abi/cu128/`
-* `https://appmana.github.io/forks-insightface-stable-abi/cu130/`
+`https://appmana.github.io/forks-insightface-stable-abi/`
 
-The wheels are CUDA-agnostic (insightface uses `onnxruntime`, not CUDA directly), so both indexes serve the same wheels — the `cu*` layout matches the convention used by the AppMana pip facade.
+(insightface uses `onnxruntime` and has no CUDA dependency, so the index has no `cu128`/`cu130` layering — one wheel set fits all GPUs.)
 
 ## Install With pip
 
 ```bash
-pip install insightface --index-url https://appmana.github.io/forks-insightface-stable-abi/cu128
+pip install insightface --index-url https://appmana.github.io/forks-insightface-stable-abi/
 ```
 
 ## Install With uv
 
 ```bash
-uv pip install --system insightface --index-url https://appmana.github.io/forks-insightface-stable-abi/cu128
+uv pip install --system insightface --index-url https://appmana.github.io/forks-insightface-stable-abi/
 ```
 
 `pyproject.toml` example for `uv`:
@@ -32,7 +31,7 @@ uv pip install --system insightface --index-url https://appmana.github.io/forks-
 ```toml
 [[tool.uv.index]]
 name = "insightface"
-url = "https://appmana.github.io/forks-insightface-stable-abi/cu128"
+url = "https://appmana.github.io/forks-insightface-stable-abi/"
 explicit = true
 
 [tool.uv.sources]
