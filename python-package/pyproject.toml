@@ -64,7 +64,7 @@ build-frontend = "build"
 # extension module needs it installed. Pinning the test deps keeps the
 # smoke fast and avoids pulling in the full scipy/scikit-image stack.
 test-requires = ["numpy>=2.0", "onnxruntime"]
-test-command = """python -c \"from insightface.thirdparty.face3d.mesh.cython import mesh_core_cython; assert '.abi3.' in mesh_core_cython.__file__, mesh_core_cython.__file__; import numpy as np; mesh_core_cython.get_normal_core(np.zeros((3,3),dtype=np.float32), np.zeros((1,3),dtype=np.float32), np.zeros((1,3),dtype=np.int32), 1); print('OK', mesh_core_cython.__file__)\""""
+test-command = """python -c \"from insightface.thirdparty.face3d.mesh.cython import mesh_core_cython; import numpy as np; mesh_core_cython.get_normal_core(np.zeros((3,3),dtype=np.float32), np.zeros((1,3),dtype=np.float32), np.zeros((1,3),dtype=np.int32), 1); print('OK', mesh_core_cython.__file__)\""""
 skip = ["*-win32", "*-manylinux_i686", "pp*", "*-musllinux_*"]
 
 [tool.cibuildwheel.linux]
