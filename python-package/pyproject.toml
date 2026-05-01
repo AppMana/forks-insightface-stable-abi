@@ -26,11 +26,12 @@ authors = [
 description = "InsightFace Python Library (stable-ABI fork)"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -58,7 +59,10 @@ addopts = "--import-mode=importlib"
 pythonpath = []
 
 [tool.cibuildwheel]
-build = "cp311-*"
+# cp311 build emits the long-lived cp311-abi3 wheel covering 3.11+.
+# cp310 build emits a per-version cp310-cp310 wheel for users still on 3.10
+# (3.10 hits EOL October 2026; this entry can be dropped after that).
+build = ["cp310-*", "cp311-*"]
 build-frontend = "build"
 # insightface/__init__.py hard-imports onnxruntime, so even reaching the
 # extension module needs it installed. Pinning the test deps keeps the
