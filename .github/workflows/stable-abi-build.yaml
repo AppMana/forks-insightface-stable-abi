@@ -62,21 +62,41 @@ jobs:
       - name: Audit ABI3
         shell: bash
         run: |
+          set -euo pipefail
           python -m pip install abi3audit
-          for whl in wheelhouse/*.whl; do
+          shopt -s nullglob
+          # Only the cp311-abi3 wheel is abi3; the cp310-cp310 wheel is a
+          # version-locked binary and abi3audit treats it as a non-target.
+          audited=0
+          for whl in wheelhouse/*cp311-abi3*.whl; do
             python -m abi3audit -v "$whl"
+            audited=$((audited + 1))
           done
+          if [[ "$audited" -eq 0 ]]; then
+            echo "ERROR: no cp311-abi3 wheel was produced for this matrix cell"
+            ls -la wheelhouse/
+            exit 1
+          fi
 
-      - name: Verify wheel tag
+      - name: Verify wheel tags
         shell: bash
         run: |
           set -euo pipefail
+          shopt -s nullglob
+          have_abi3=0
+          have_cp310=0
           for whl in wheelhouse/*.whl; do
             case "$whl" in
-              *cp311-abi3*) ;;
+              *cp311-abi3*) have_abi3=$((have_abi3 + 1)) ;;
+              *cp310-cp310*) have_cp310=$((have_cp310 + 1)) ;;
               *) echo "Unexpected wheel tag: $whl"; exit 1 ;;
             esac
           done
+          if [[ "$have_abi3" -ne 1 || "$have_cp310" -ne 1 ]]; then
+            echo "Expected exactly one cp311-abi3 wheel and one cp310-cp310 wheel; got abi3=$have_abi3 cp310=$have_cp310"
+            ls -la wheelhouse/
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
