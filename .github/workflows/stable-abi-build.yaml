@@ -92,8 +92,11 @@ jobs:
               *) echo "Unexpected wheel tag: $whl"; exit 1 ;;
             esac
           done
-          if [[ "$have_abi3" -ne 1 || "$have_cp310" -ne 1 ]]; then
-            echo "Expected exactly one cp311-abi3 wheel and one cp310-cp310 wheel; got abi3=$have_abi3 cp310=$have_cp310"
+          # macOS builds both x86_64 and arm64 in one job, other cells are
+          # single-arch — so the count is N per tag where N = number of archs.
+          # Real invariant: every cp310 wheel must be paired with one cp311-abi3.
+          if [[ "$have_abi3" -ne "$have_cp310" || "$have_abi3" -eq 0 ]]; then
+            echo "Expected matched cp311-abi3 / cp310-cp310 wheels; got abi3=$have_abi3 cp310=$have_cp310"
             ls -la wheelhouse/
             exit 1
           fi
